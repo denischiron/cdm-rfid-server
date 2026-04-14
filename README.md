@@ -7,6 +7,11 @@ Dependencies : 'ws' node module, installed with npm
 
 A JSON message is sent with TagID, IP address of the RFID device, and timestamp.
 
+Ex: {"tag_id":"1d64efbf","rfid_ip":"192.168.1.17","timestamp":"2026-04-14T17:28:20.824Z"}
+
+
+## Installing on Windows :
+
 The server can be installed, started, uninstalled as a Windows service with qckwinsvc2 package (logs, errors).
 
 qckwinsvc2 install name="TCP_listener" description="RFID Automatic tag listener to WS"
