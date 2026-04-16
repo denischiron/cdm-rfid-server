@@ -1,6 +1,9 @@
 const { networkInterfaces } = require('os');
 const net = require('net');
+const path = require('path')
+const fs = require('fs');
 const WebSocket = require('ws');
+
 
 
 /**************************************************/
@@ -9,6 +12,14 @@ let tcpHost = '192.168.1.13'; // default value
 const tcpPort = 1300;
 /**************************************************/
 
+
+const log = function(data) {
+    console.log(getTimestamp() + ": " + data);
+}
+
+const getTimestamp = function(data) {
+	return new Date().toISOString().slice(0, 19).replace('T', ' ');;
+}
 
 const getLocal_IP = function() {
 
@@ -61,20 +72,108 @@ const getTagIdFromTagData = function(tag) {
     return DATA;
 }
 
-const getTimestamp = function(data) {
-	return new Date().toISOString().slice(0, 19).replace('T', ' ');;
-}
-
-const log = function(data) {
-    console.log(getTimestamp() + ": " + data);
-}
+log('--------- Server init ---------');
 
 
 //
-// WebSocket
+// WebSocket client 
 //
 
-const ws = new WebSocket('ws://localhost:8080');
+let ws;
+let ws_URL;
+
+const openWebSocketConnection = function(messageJSON) {
+	if (ws_URL) {
+		log(`Open Websocket connection... ${ws_URL}`);
+		ws = new WebSocket(ws_URL);
+		
+		ws.addEventListener("open", () => {
+		  log(`WebSocket connection opened : ${ws_URL}`);
+		  
+		  if (messageJSON) {
+			  setTimeout(function() {
+				log(`WebSocket client is ready : sending message...`);
+				sendMessageToWebSocketServer(messageJSON);
+			  }, 100);
+		  }
+		  
+		});
+		
+		ws.addEventListener("error", () => {
+		  log(`WebSocket connection error : ${ws_URL}`);
+		});	
+		
+		ws.addEventListener("close", () => {
+			// Disconnected
+			ws = null;
+		});
+		
+	} else {
+	  log(`WebSocket URL not defined`);
+	}
+}
+
+const sendMessageToWebSocketServer = function(messageJSON) {
+	if (ws) {
+		
+		const message = Buffer.from( JSON.stringify(messageJSON) );
+		ws.send(message);
+
+	} else {
+		
+		// Open connection then send message :
+		openWebSocketConnection(messageJSON);
+		
+	}
+}
+
+
+
+//
+// Config : RFID IPs 
+//
+
+let RFID_readers_config = {};
+
+const getRFIDReaderConfig = function(IpAdddress) {
+	if (RFID_readers_config && RFID_readers_config[IpAdddress]) {
+		return RFID_readers_config[IpAdddress];
+	}
+	return "NOT_FOUND";
+}
+
+
+const loadConfig = function() {
+	fs.readFile(path.resolve(__dirname, 'config.json'), 'UTF-8', function(err, data) { 
+
+		if (err) throw err; 
+
+		const config = JSON.parse(data); 
+		
+		if (config.websocket_URL) {
+			
+			//
+			// WebSocket
+			//
+			
+			ws_URL = config.websocket_URL;
+
+			// Try to open connection on start :
+			openWebSocketConnection();
+			
+		} else {
+			  log(`WebSocket URL is missing in config.json`);
+		}
+		
+		if (config.RFID_readers) {
+			RFID_readers_config = config.RFID_readers;
+			log('RFID readers config loaded' );
+		} else {
+			  log(`RFID readers config is missing in config.json`);
+		}
+	}); 
+}
+loadConfig();
 
 
 //
@@ -96,21 +195,22 @@ const tcpSocket = net.createServer((socket) => {
 
   socket.on("data", (data) => {
 
-    const tagData = data.toString('hex');
-    const tagID = getTagIdFromTagData(tagData);
+    const tag_data = data.toString('hex');
+    const tag_ID = getTagIdFromTagData(tag_data);
 	
-    log(`Received data : ${tagID}`);	
+	const RFID_reader_IP_address = socket.remoteAddress;
+	const RFID_reader_entry_point = getRFIDReaderConfig(RFID_reader_IP_address);
+	
+    log(`Received data : ${tag_ID}`);	
 
-	const messageObj = {
-		"tag_id" : tagID,
-		"rfid_ip": socket.remoteAddress,
+
+    // Notification to WebSocket server :	
+	sendMessageToWebSocketServer({
+		"tag_id" : tag_ID,
+		"RFID_ip": RFID_reader_IP_address,
+		"RFID_entry_point": RFID_reader_entry_point,
 		"timestamp": new Date().toISOString()
-	}
-
-
-    // WebSocket :
-    const message = Buffer.from( JSON.stringify(messageObj) );
-	ws.send(message);
+	});
 
   });
 
