@@ -208,7 +208,7 @@ const tcpSocket = net.createServer((socket) => {
 	sendMessageToWebSocketServer({
 		"tag_id" : tag_ID,
 		"RFID_ip": RFID_reader_IP_address,
-		"RFID_entry_point": RFID_reader_entry_point,
+		"current_step": RFID_reader_entry_point,
 		"timestamp": new Date().toISOString()
 	});
 
